@@ -9,7 +9,11 @@ const clients = new Map();
 const lastDmPeer = new Map();
 
 function sendLine(socket, line) {
-  if (!socket.destroyed) socket.write(line + "\n");
+  if (!socket) return;
+  if (socket.destroyed) return;
+  if (!socket.writable) return;
+  if (socket.writableEnded) return;
+  socket.write(line + "\n");
 }
 
 function dropDmRefs(deadSocket) {
@@ -83,6 +87,26 @@ function setNick(socket, newNick) {
   return;
 }
 
+function disconnect(socket, reason = "left") {
+  const me = clients.get(socket);
+  if (!me || me.disconnected) return;
+
+  me.disconnected = true;
+
+  if (me.joinTimer) clearTimeout(me.joinTimer);
+  me.joinTimer = null;
+
+  clients.delete(socket);
+  lastDmPeer.delete(socket);
+  dropDmRefs(socket);
+
+  // Só anuncia saída se ele chegou a ser “anunciado”
+  if (me.announced) {
+    broadcastAllLine(`${me.nick} left the chat!`);
+    broadcastAllLine(`There are now ${clients.size} user(s) online.`);
+  }
+}
+
 function handleLine(socket, line) {
   const me = clients.get(socket);
   if (!me) return;
@@ -115,6 +139,7 @@ function handleLine(socket, line) {
     }
     if (cmd === "/quit") {
       sendLine(socket, "Bye!");
+      disconnect(socket, "quit");
       socket.end();
       return;
     }
@@ -194,7 +219,7 @@ function announceJoin(socket) {
 
 const server = net.createServer((socket) => {
   const nick = `user-${nextId++}`;
-  clients.set(socket, { nick, buffer: Buffer.alloc(0), announced: false, joinTimer: null });
+  clients.set(socket, { nick, buffer: Buffer.alloc(0), announced: false, joinTimer: null, disconnected: false });
   console.log("Client connected:", socket.remoteAddress, socket.remotePort);
 
   sendLine(socket, "Welcome to the TCP server!");
@@ -222,30 +247,17 @@ const server = net.createServer((socket) => {
   })
 
   socket.on("end", () => {
-    const me = clients.get(socket);
-    if (!me) return;
-
-    clients.delete(socket);
-    lastDmPeer.delete(socket);
-    dropDmRefs(socket);
-    console.log("Cliend desconnected!");
-    broadcastAllLine(me.nick + " left the chat!");
-    broadcastAllLine(`There are now ${clients.size} user(s) online.`)
-    if (me?.joinTimer) clearTimeout(me.joinTimer);
+    disconnect(socket, "end");
   })
 
   socket.on("error", (err) => {
-    const me = clients.get(socket);
-    if (me) {
-      clients.delete(socket);
-      broadcastAllLine(me.nick + " left the chat!");
-      broadcastAllLine(`There are now ${clients.size} user(s) online.`)
-    }
-    lastDmPeer.delete(socket);
-    dropDmRefs(socket);
-    console.log("Error on socket: ", err.message);
-    if (me?.joinTimer) clearTimeout(me.joinTimer);
+    disconnect(socket, "error");
+    console.log("Error on socket:", err.message);
   })
+
+  socket.on("close", () => {
+    disconnect(socket, "close");
+  });
 })
 
 server.listen(PORT, () => {
