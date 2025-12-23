@@ -32,9 +32,9 @@ function setNick(socket, newNick) {
     return;
   }
 
-  const taken = [...clients.values()].some((c) => c.nick.toLowerCase() === nick.toLowerCase());
-  if(!taken) {
-    sendLine(socket, `${nick} is already in use. Choose another one.`);
+  const taken = [...clients.values()].some((x) => x.nick.toLowerCase() === nick.toLowerCase());
+  if (taken) {
+    sendLine(socket, `Nome "${nick}" já está em uso.`);
     return;
   }
 
@@ -50,16 +50,16 @@ function handleLine(socket, line) {
   if (!me) return;
 
   const text = line.replace(/\r$/, ""); // compact windows
-  if(!text) return;
+  if (!text) return;
 
-  if(text.startsWith("/")) {
+  if (text.startsWith("/")) {
     const [cmd, ...rest] = text.split(" ");
     const arg = rest.join(" ").trim();
 
-    if(cmd === "/nick") return setNick(socket, arg);
-    if(cmd === "/who") return sendLine(socket, `Online (${clients.size}): ${listNicks()}`);
-    if(cmd === "/help") return sendLine(socket, "Commands: /nick <name>, /who, /help, /quit");
-    if(cmd === "/quit") {
+    if (cmd === "/nick") return setNick(socket, arg);
+    if (cmd === "/who") return sendLine(socket, `Online (${clients.size}): ${listNicks()}`);
+    if (cmd === "/help") return sendLine(socket, "Commands: /nick <name>, /who, /help, /quit");
+    if (cmd === "/quit") {
       sendLine(socket, "Bye!");
       socket.end();
       return;
@@ -90,11 +90,11 @@ const server = net.createServer((socket) => {
 
   socket.on("data", (chunck) => {
     const me = clients.get(socket);
-    if(!me) return;
+    if (!me) return;
 
     me.buffer = Buffer.concat([me.buffer, chunck]);
 
-    while(true) {
+    while (true) {
       const idx = me.buffer.indexOf(0x0a);
       if (idx === -1) break;
 
@@ -107,8 +107,8 @@ const server = net.createServer((socket) => {
 
   socket.on("end", () => {
     const me = clients.get(socket);
-    if(!me) return;
-    
+    if (!me) return;
+
     clients.delete(socket);
     console.log("Cliend desconnected!");
     broadcastLine(me.nick + " exit from the chat!")
@@ -116,7 +116,7 @@ const server = net.createServer((socket) => {
 
   socket.on("error", () => {
     const me = clients.get(socket);
-    if(me) {
+    if (me) {
       clients.delete(socket);
       broadcastLine(me.nick + " exit from the chat!");
     }
@@ -125,5 +125,5 @@ const server = net.createServer((socket) => {
 })
 
 server.listen(PORT, () => {
-  console.log("Server running in 127.0.0.1:"+PORT)
+  console.log("Server running in 127.0.0.1:" + PORT)
 })
