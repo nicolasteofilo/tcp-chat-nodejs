@@ -100,7 +100,6 @@ function disconnect(socket, reason = "left") {
   lastDmPeer.delete(socket);
   dropDmRefs(socket);
 
-  // Só anuncia saída se ele chegou a ser “anunciado”
   if (me.announced) {
     broadcastAllLine(`${me.nick} left the chat!`);
     broadcastAllLine(`There are now ${clients.size} user(s) online.`);
