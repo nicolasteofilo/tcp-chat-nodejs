@@ -1,8 +1,40 @@
 const net = require("net");
 const readline = require("readline");
 
-const HOST = process.argv[2] || "127.0.0.1";
-const PORT = Number(process.argv[3]) || 5000;
+const args = process.argv.slice(2);
+
+let HOST = "127.0.0.1";
+let PORT = 5000;
+let initialNick = null;
+
+// Accept command line arguments in the following forms:
+// - node client.js
+// - node client.js <host>
+// - node client.js <host> <port>
+// - node client.js <host> <port> --nick <name>
+// - node client.js --nick <name>
+for (let i = 0; i < args.length; i++) {
+  const a = args[i];
+
+  if (a === "--nick" || a === "-n") {
+    initialNick = args[i + 1] || null;
+    i++;
+    continue;
+  }
+
+  if (!a.startsWith("-")) {
+    if (HOST === "127.0.0.1") {
+      HOST = a;
+      continue;
+    }
+    if (PORT === 5000) {
+      const maybePort = Number(a);
+      if (!Number.isNaN(maybePort)) PORT = maybePort;
+      continue;
+    }
+    if (!initialNick) initialNick = a;
+  }
+}
 const socket = net.createConnection({ host: HOST, port: PORT });
 
 let buffer = Buffer.alloc(0);
@@ -14,12 +46,15 @@ function pLine(line) {
 socket.on("connect", () => {
   pLine(`Connected to chat server at ${HOST}:${PORT}`);
   pLine(`Type /help for commands.`);
+  if (initialNick) {
+    socket.write(`/nick ${initialNick}\n`);
+  }
 });
 
 socket.on("data", (chunck) => {
   buffer = Buffer.concat([buffer, chunck]);
 
-  while(true) {
+  while (true) {
     const idx = buffer.indexOf(0x0a);
     if (idx === -1) break;
 
