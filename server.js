@@ -23,6 +23,25 @@ function listNicks() {
   return [...clients.values()].map(client => client.nick).join(", ") || "(nobody)"
 }
 
+function broadcastAllLine(line) {
+  for (const socket of clients.keys()) {
+    if(!socket.destroyed) {
+      sendLine(socket, line);
+    }
+  }
+}
+
+function findSocketByNick(nick) {
+  if(!nick || nick.length === 0) return null;
+  const wanted = (nick || "").trim().toLowerCase();
+  if(!wanted) return null;
+
+  for (const [socket, client] of clients.entries()) {
+    if(client.nick.toLowerCase() === wanted) return socket;
+  }
+  return null;
+}
+
 function setNick(socket, newNick) {
   const me = clients.get(socket);
 
@@ -58,10 +77,40 @@ function handleLine(socket, line) {
 
     if (cmd === "/nick") return setNick(socket, arg);
     if (cmd === "/who") return sendLine(socket, `Online (${clients.size}): ${listNicks()}`);
-    if (cmd === "/help") return sendLine(socket, "Commands: /nick <name>, /who, /help, /quit");
+    if (cmd === "/help") return sendLine(socket, "Commands: /nick <name>, /who, /msg <nick> <text>, /me <action>, /help, /quit");
     if (cmd === "/quit") {
       sendLine(socket, "Bye!");
       socket.end();
+      return;
+    }
+    if(cmd === "/msg") {
+      const [targetNick, ...messageParts] = rest;
+      const msg = messageParts.join(" ").trim();
+
+      if(!targetNick || !msg) {
+        sendLine(socket, "Use: /msg <nick> <text>");
+        return;
+      }
+
+      const targetSocket = findSocketByNick(targetNick);
+      if(!targetSocket) {
+        sendLine(socket, `User "${targetNick}" not found.`);
+        return;
+      }
+
+      sendLine(targetSocket, `[private] [${me.nick}] ${msg}`);
+      sendLine(socket, `[private to ${targetNick}] ${msg}`);
+      return;
+    }
+
+    if(cmd === "/me") {
+      if(!arg) {
+        sendLine(socket, "Use: /me <action>");
+        return;
+      }
+
+      // send to all (including me)
+      broadcastAllLine(`* ${me.nick} ${arg}`);
       return;
     }
 
@@ -111,14 +160,16 @@ const server = net.createServer((socket) => {
 
     clients.delete(socket);
     console.log("Cliend desconnected!");
-    broadcastLine(me.nick + " exit from the chat!")
+    broadcastAllLine(me.nick + " left the chat!");
+    broadcastAllLine(`There are now ${clients.size} user(s) online.`)
   })
 
   socket.on("error", () => {
     const me = clients.get(socket);
     if (me) {
       clients.delete(socket);
-      broadcastLine(me.nick + " exit from the chat!");
+      broadcastAllLine(me.nick + " left the chat!");
+      broadcastAllLine(`There are now ${clients.size} user(s) online.`)
     }
     console.log("Error on socket: ", err.message);
   })
